@@ -8,11 +8,11 @@ from msh2cande.structure_build import Structure
 element_columns = ("i", "j", "k", "l", "mat", "step")
 boundary_columns = ("n", "xcode", "xvalue", "ycode", "yvalue", "angle", "step")
 
-CANDE_PREFIX_FMT = "{: >27s}"
-C2_FMT = f"{CANDE_PREFIX_FMT.format('C-2.L3!!')}{{}}"
-C3_FMT = f"{CANDE_PREFIX_FMT.format('C-3.L3!!')} {{}}"
-C4_FMT = f"{CANDE_PREFIX_FMT.format('C-4.L3!!')} {{}}"
-C5_FMT = f"{CANDE_PREFIX_FMT.format('C-5.L3!!')} {{}}"
+CANDE_PREFIX_FMT = "{: >25s}!!"
+C2_FMT = f"{CANDE_PREFIX_FMT.format('C-2.L3')}{{}}"
+C3_FMT = f"{CANDE_PREFIX_FMT.format('C-3.L3')} {{}}"
+C4_FMT = f"{CANDE_PREFIX_FMT.format('C-4.L3')} {{}}"
+C5_FMT = f"{CANDE_PREFIX_FMT.format('C-5.L3')} {{}}"
 
 def lastify(s, idx=27):
     return s[:idx] + "L" + s[idx+1:]
