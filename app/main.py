@@ -1,12 +1,26 @@
 from pathlib import Path
 
 import pandas as pd
+from msh2cande.format import c3, c4, c5, c2
 from msh2cande.msh_load import _load_msh, _extents
 from msh2cande.structure_build import Structure
 
 element_columns = ("i", "j", "k", "l", "mat", "step")
+boundary_columns = ("n", "xcode", "xvalue", "ycode", "yvalue", "angle", "step")
 
-KEEP_INDEXES = range(30, 119)
+CANDE_PREFIX_FMT = "{: >27s}"
+C2_FMT = f"{CANDE_PREFIX_FMT.format('C-2.L3!!')}{{}}"
+C3_FMT = f"{CANDE_PREFIX_FMT.format('C-3.L3!!')} {{}}"
+C4_FMT = f"{CANDE_PREFIX_FMT.format('C-4.L3!!')} {{}}"
+C5_FMT = f"{CANDE_PREFIX_FMT.format('C-5.L3!!')} {{}}"
+
+def lastify(s, idx=27):
+    return s[:idx] + "L" + s[idx+1:]
+
+KEEP_INDEXES = range(30, 120)
+
+N_BEAMS = 89
+N_LL_STEPS = 1
 
 N_MATERIALS = 3
 # material boundaries
@@ -61,6 +75,8 @@ if __name__ == "__main__":
     struct_elements.step = 1
     struct_elements.i = struct_nodes.loc[2:, "n"].values
     struct_elements.j = struct_nodes.loc[: len(struct_nodes) - 1, "n"].values
+    # sanity check
+    assert N_BEAMS == len(struct_elements)
 
     # define quad soil element dfs: quad and tria
     quad_elements = pd.DataFrame(index=msh_quad_df.index, columns=element_columns)
@@ -113,12 +129,39 @@ if __name__ == "__main__":
     soil_elements = pd.concat([quad_elements, tria_elements]).sort_index()
     soil_elements.index += len(struct_elements)
     elements_no_interf = pd.concat([struct_elements, soil_elements])
+    elements_no_interf.index.name = "e"
 
     # TODO: concat elements with interf elements
+    elements = elements_no_interf.copy()
 
     # TODO: concat nodes with interf nodes
+    nodes = msh_n_df.copy()
 
-    # TODO: fill out columns for boundaries
+    # define boundaries df; use extends as starting point
+    # TODO: add more options/user interaction/LL boundaries
+    boundaries = msh_ext_df
+    # sanity check
+    assert boundaries.step.le(N_LL_STEPS).all()
 
-    # TODO: save formatted output
+    # prepare output lines
+    C2 = C2_FMT.format(c2(elements.step.max()+N_LL_STEPS, nodes.index[-1], elements.index[-1], len(boundaries), elements.mat.max(), 0))
+    C3 = nodes.reset_index().apply(lambda s: C3_FMT.format(c3(**s)), axis=1, result_type="reduce")
+    C3[C3.index[-1]] = lastify(C3[C3.index[-1]])
+    C4 = elements.reset_index().apply(lambda s: C4_FMT.format(c4(**s)), axis=1, result_type="reduce")
+    C4[C4.index[-1]] = lastify(C4[C4.index[-1]])
+    # NOTE: boundaries df need not have reset_index() applied
+    C5 = boundaries.apply(lambda s: C5_FMT.format(c5(**s)), axis=1, result_type="reduce")
+    C5[C5.index[-1]] = lastify(C5[C5.index[-1]])
+
+    # TODO: prompt user for output path
+    out = Path("result.cid._partial")
+    with out.open("w") as f:
+        f.write(C2)
+        f.write("\n")
+        f.write("\n".join(C3))
+        f.write("\n")
+        f.write("\n".join(C4))
+        f.write("\n")
+        f.write("\n".join(C5))
+        f.write("\n")
     ...
