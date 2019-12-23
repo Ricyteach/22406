@@ -62,9 +62,16 @@ if __name__ == "__main__":
     # USER INPUT: struct.show_candidates()
     struct.candidates_df = struct.candidates_df.loc[[*KEEP_INDEXES], :]
 
+    # TODO: iterate over multiple structures/groups
     # define structure nodes
     struct_nodes = struct.candidates_df
     struct_nodes.index = range(1, len(struct_nodes) + 1)
+    # define i,j interface nodes on structure
+    # TODO: correctly show currently specified struct nodes for choosing interfaces
+    # USER INPUT: struct.show_candidates()
+    interf_struct_nodes = range(89, 1, -1)  # user input
+    n_interf = len(interf_struct_nodes)
+    struct_nodes.loc[interf_struct_nodes, "interf_num"] = range(1, n_interf+1)
     # USER INPUT: struct.show_candidates()
 
     # define struct element df; assume non-contiguous structure, load step 1, material 1, left to right connectivity
@@ -125,16 +132,27 @@ if __name__ == "__main__":
 
     # TODO: set materials and steps for TRIA elements
 
-    # TODO: produce interfaces BEFORE concating structure elements with others (node numbering change)
+    # produce interfaces BEFORE concating structure elements with others (node numbering change)
+    # TODO: iterate over interface sets for multiple structures/groups
+    interf_index = range(1, n_interf+1)
+    interf_elements = pd.DataFrame(index=interf_index, columns=element_columns)
+    interf_elements["i"] = interf_nodes.index + msh_n_df.index[-1]
+    interf_elements["j"] = interf_nodes["n"]
+    interf_elements["k"] =
+    interf_elements["l"] = 0
+    interf_elements["mat"] = interf_nodes.index
+    interf_elements["step"] = 1
+    interf_elements["interf"] = 1
 
     # combine, structure, QUAD, TRIA, into a single soil df, renumber to place beams first
     soil_elements = pd.concat([quad_elements, tria_elements]).sort_index()
     soil_elements.index += len(struct_elements)
     elements_no_interf = pd.concat([struct_elements, soil_elements])
     elements_no_interf.index.name = "e"
+    elements_no_interf["interf"] = 0
 
     # TODO: concat elements with interf elements
-    elements = elements_no_interf.copy()
+    elements = pd.concat([elements_no_interf, interf_elements])
 
     # TODO: concat nodes with interf nodes
     nodes = msh_n_df.copy()
