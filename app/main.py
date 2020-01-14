@@ -19,18 +19,19 @@ def lastify(s, idx=27):
     return s[:idx] + "L" + s[idx + 1 :]
 
 
-KEEP_INDEXES = range(30, 120)
+KEEP_INDEXES = range(1, 94)
+INTERF_STRUCT_NODES = range(0)  # user input
 
-N_BEAMS = 89
+N_BEAMS = 92
 N_LL_STEPS = 1
 
 N_MATERIALS = 3
 # material boundaries
 MAT_BOUNDS = dict(
-    minx=[-393.6, -393.6, -33.6],
-    maxx=[702.88, 702.88, 342.88],
-    miny=[-316.14, -196.14, -196.14],
-    maxy=[-63.79, -63.79, -63.79],
+    minx=[-383.6, -383.6, -8.3],
+    maxx=[728.89, 728.89, 368.89],
+    miny=[-408.16, -288.16, -288.16],
+    maxy=[-150.29, -150.29, -150.29],
 )
 # sanity check
 for bound in MAT_BOUNDS.values():
@@ -38,7 +39,7 @@ for bound in MAT_BOUNDS.values():
 
 N_DL_STEPS = 1
 # material boundaries
-DL_STEP_BOUNDS = dict(minx=[-393.6,], maxx=[702.88,], miny=[-316.14,], maxy=[-63.79,],)
+DL_STEP_BOUNDS = dict(minx=[-383.6,], maxx=[728.89,], miny=[-408.16,], maxy=[-150.29,],)
 # sanity check
 for bound in DL_STEP_BOUNDS.values():
     assert len(bound) == N_DL_STEPS
@@ -47,7 +48,7 @@ for bound in DL_STEP_BOUNDS.values():
 if __name__ == "__main__":
 
     # load msh and get nodes, elements, boundaries, and extents
-    msh = _load_msh(Path("mesh2.msh"))
+    msh = _load_msh(Path(r"S:\Other\22406 - VHB - 0834 ALBC 87\mesh 1.msh"))
     msh_n_df, msh_e_df, msh_b_df = msh.nodes, msh.elements, msh.boundaries
 
     # define quad, tria, and extents portions of msh
@@ -59,8 +60,9 @@ if __name__ == "__main__":
 
     # load msh into a Structure and clean it up
     struct = Structure(msh_b_df, msh_n_df, msh_e_df, msh_ext_df)
-    # USER INPUT: struct.show_candidates()
+    # struct.show_candidates()
     struct.candidates_df = struct.candidates_df.loc[[*KEEP_INDEXES], :]
+    # struct.show_candidates()
 
     # TODO: iterate over multiple structures/groups
     # define structure nodes
@@ -68,10 +70,9 @@ if __name__ == "__main__":
     struct_nodes.index = range(1, len(struct_nodes) + 1)
     # define i,j interface nodes on structure
     # TODO: correctly show currently specified struct nodes for choosing interfaces
-    # USER INPUT: struct.show_candidates()
-    interf_struct_nodes = range(89, 1, -1)  # user input
-    n_interf = len(interf_struct_nodes)
-    struct_nodes.loc[interf_struct_nodes, "interf_num"] = range(1, n_interf+1)
+    # struct.show_candidates()
+    n_interf = len(INTERF_STRUCT_NODES)
+    struct_nodes.loc[INTERF_STRUCT_NODES, "interf_num"] = range(1, n_interf + 1)
     # USER INPUT: struct.show_candidates()
 
     # define struct element df; assume non-contiguous structure, load step 1, material 1, left to right connectivity
@@ -132,17 +133,17 @@ if __name__ == "__main__":
 
     # TODO: set materials and steps for TRIA elements
 
-    # produce interfaces BEFORE concating structure elements with others (node numbering change)
-    # TODO: iterate over interface sets for multiple structures/groups
+    # # produce interfaces BEFORE concating structure elements with others (node numbering change)
+    # # TODO: iterate over interface sets for multiple structures/groups
     interf_index = range(1, n_interf+1)
     interf_elements = pd.DataFrame(index=interf_index, columns=element_columns)
-    interf_elements["i"] = interf_nodes.index + msh_n_df.index[-1]
-    interf_elements["j"] = interf_nodes["n"]
-    interf_elements["k"] =
-    interf_elements["l"] = 0
-    interf_elements["mat"] = interf_nodes.index
-    interf_elements["step"] = 1
-    interf_elements["interf"] = 1
+    # interf_elements["i"] = interf_nodes.index + msh_n_df.index[-1]
+    # interf_elements["j"] = interf_nodes["n"]
+    # interf_elements["k"] =
+    # interf_elements["l"] = 0
+    # interf_elements["mat"] = interf_nodes.index
+    # interf_elements["step"] = 1
+    # interf_elements["interf"] = 1
 
     # combine, structure, QUAD, TRIA, into a single soil df, renumber to place beams first
     soil_elements = pd.concat([quad_elements, tria_elements]).sort_index()
@@ -153,6 +154,7 @@ if __name__ == "__main__":
 
     # TODO: concat elements with interf elements
     elements = pd.concat([elements_no_interf, interf_elements])
+    elements.index.name = "e"
 
     # TODO: concat nodes with interf nodes
     nodes = msh_n_df.copy()
