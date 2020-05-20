@@ -1,167 +1,160 @@
-from pathlib import Path
-
-import pandas as pd
 from msh2cande.format import c3, c4, c5, c2
 from msh2cande.msh_load import _load_msh, _extents
 from msh2cande.structure_build import Structure
 
-element_columns = ("i", "j", "k", "l", "mat", "step")
-boundary_columns = ("n", "xcode", "xvalue", "ycode", "yvalue", "angle", "step")
-
-CANDE_PREFIX_FMT = "{: >25s}!!"
-C2_FMT = f"{CANDE_PREFIX_FMT.format('C-2.L3')}{{}}"
-C3_FMT = f"{CANDE_PREFIX_FMT.format('C-3.L3')} {{}}"
-C4_FMT = f"{CANDE_PREFIX_FMT.format('C-4.L3')} {{}}"
-C5_FMT = f"{CANDE_PREFIX_FMT.format('C-5.L3')} {{}}"
+from app.info import *
+from app.common import *
 
 
-def lastify(s, idx=27):
-    return s[:idx] + "L" + s[idx + 1 :]
+def build_struct_and_kept_indexes(*, show=True):
+    """Load msh into a Structure for the purpose of display.
+
+    Clean it up and edit KEEP_INDEXES.
+    """
+    struct = Structure(msh_b_df, msh_n_df, msh_e_df, msh_ext_df)
+    if show:
+        struct.show_candidates()
+    struct.candidates_df = struct.candidates_df.loc[
+        [idx for indexes in KEEP_INDEXES for idx in indexes], :
+    ]
+    if show:
+        struct.show_candidates()
+    return struct
 
 
-KEEP_INDEXES = range(30, 120)
+def gen_struct_elements(struct, *, show=True):
+    """Produces a structure/beam element df for each structure."""
+    for keeps, interfaces, struct_step, struct_mat, n_beams, connectivity_int in zip(
+        KEEP_INDEXES,
+        INTERF_STRUCT_NODES,
+        STRUCT_STEPS,
+        STRUCT_MATS,
+        N_BEAMS,
+        CONNECTIVITY,
+    ):
+        # TODO: handle the case of multiple beam groups within a structure
+        # define structure nodes
+        structx_nodes = struct.candidates_df.loc[[*keeps], :]
+        structx_nodes.index = range(1, len(structx_nodes) + 1)
+        # define i,j interface nodes on structure
+        # TODO: correctly show currently specified struct nodes for choosing interfaces
+        # TODO: correctly show current structure and beam groups, not all structures
+        if show:
+            struct.show_candidates()
+        n_interf = len(interfaces)
+        structx_nodes.loc[interfaces, "interf_num"] = range(1, n_interf + 1)
+        if show:
+            struct.show_candidates()
 
-N_BEAMS = 89
-N_LL_STEPS = 1
-
-N_MATERIALS = 3
-# material boundaries
-MAT_BOUNDS = dict(
-    minx=[-393.6, -393.6, -33.6],
-    maxx=[702.88, 702.88, 342.88],
-    miny=[-316.14, -196.14, -196.14],
-    maxy=[-63.79, -63.79, -63.79],
-)
-# sanity check
-for bound in MAT_BOUNDS.values():
-    assert len(bound) == N_MATERIALS
-
-N_DL_STEPS = 1
-# material boundaries
-DL_STEP_BOUNDS = dict(minx=[-393.6,], maxx=[702.88,], miny=[-316.14,], maxy=[-63.79,],)
-# sanity check
-for bound in DL_STEP_BOUNDS.values():
-    assert len(bound) == N_DL_STEPS
+        # define struct element df; assume left-to-right connectivity
+        structx_elements = pd.DataFrame(
+            # if contiguous, the number of elements = number of nodes
+            # if noncontiguous, number of elements = number of nodes -1
+            index=range(1, len(structx_nodes) + 1 - connectivity_int),
+            columns=ELEMENT_COLUMNS,
+        )
+        structx_elements.k = 0
+        structx_elements.l = 0
+        structx_elements.mat = struct_mat
+        structx_elements.step = struct_step
+        last_i = {
+            Connectivity.contiguous: structx_nodes.index[0],
+            Connectivity.noncontiguous: structx_nodes.index[-1],
+        }[connectivity_int]
+        last_j = len(structx_nodes) - connectivity_int
+        structx_elements.i = structx_nodes.loc[
+            [*range(2, last_j + 1), last_i], "n"
+        ].values
+        structx_elements.j = structx_nodes.loc[range(1, last_j + 1), "n"].values
+        # sanity check
+        assert n_beams == len(structx_elements)
+        # TODO: potentially use SeqNumberView objects for element i and j numbers
+        yield structx_elements
 
 
 if __name__ == "__main__":
 
     # load msh and get nodes, elements, boundaries, and extents
-    msh = _load_msh(Path("mesh2.msh"))
+    msh = _load_msh(MSH_FILE)
     msh_n_df, msh_e_df, msh_b_df = msh.nodes, msh.elements, msh.boundaries
 
     # define quad, tria, and extents portions of msh
-    msh_quad_df = msh_e_df.loc[msh_e_df.l != 0]
-    msh_tria_df = msh_e_df.loc[(msh_e_df.l == 0) & (msh_e_df.k != 0)]
+    msh_quad_df = msh_e_df.loc[msh_e_df.i != msh_e_df.l]
+    msh_tria_df = msh_e_df.loc[(msh_e_df.i == msh_e_df.l)]
     msh_ext_df = _extents(msh_n_df, msh_b_df)
 
     # TODO: resolve l node numbering depending on TRIA or QUAD element type
 
-    # load msh into a Structure and clean it up
-    struct = Structure(msh_b_df, msh_n_df, msh_e_df, msh_ext_df)
-    # USER INPUT: struct.show_candidates()
-    struct.candidates_df = struct.candidates_df.loc[[*KEEP_INDEXES], :]
+    # load msh into a Structure and clean it up in order to display and edit KEEP_INDEXES
+    struct = build_struct_and_kept_indexes(show=False)
 
-    # TODO: iterate over multiple structures/groups
-    # define structure nodes
-    struct_nodes = struct.candidates_df
-    struct_nodes.index = range(1, len(struct_nodes) + 1)
-    # define i,j interface nodes on structure
-    # TODO: correctly show currently specified struct nodes for choosing interfaces
-    # USER INPUT: struct.show_candidates()
-    interf_struct_nodes = range(89, 1, -1)  # user input
-    n_interf = len(interf_struct_nodes)
-    struct_nodes.loc[interf_struct_nodes, "interf_num"] = range(1, n_interf+1)
-    # USER INPUT: struct.show_candidates()
+    # define structure/beam element df for each structure
+    struct_elements = list(gen_struct_elements(struct, show=False))
 
-    # define struct element df; assume non-contiguous structure, load step 1, material 1, left to right connectivity
-    struct_elements = pd.DataFrame(
-        index=range(1, len(struct_nodes)), columns=element_columns
-    )
-    struct_elements.k = 0
-    struct_elements.l = 0
-    struct_elements.mat = 1
-    struct_elements.step = 1
-    struct_elements.i = struct_nodes.loc[2:, "n"].values
-    struct_elements.j = struct_nodes.loc[: len(struct_nodes) - 1, "n"].values
-    # sanity check
-    assert N_BEAMS == len(struct_elements)
-
-    # define quad soil element dfs: quad and tria
-    quad_elements = pd.DataFrame(index=msh_quad_df.index, columns=element_columns)
+    # define soil element dfs: quad and tria
+    quad_elements = pd.DataFrame(index=msh_quad_df.index, columns=ELEMENT_COLUMNS)
     quad_elements.loc[:, "i":"l"] = msh_quad_df.values
-    tria_elements = pd.DataFrame(index=msh_tria_df.index, columns=element_columns)
+
+    tria_elements = pd.DataFrame(index=msh_tria_df.index, columns=ELEMENT_COLUMNS)
     tria_elements.loc[:, "i":"l"] = msh_tria_df.values
+    tria_elements.loc[:, "l"] = 0
 
     # define soil material and step zones
-    mat_zones = pd.DataFrame(MAT_BOUNDS, index=range(1, N_MATERIALS + 1))
-    dl_step_zones = pd.DataFrame(DL_STEP_BOUNDS, index=range(1, N_DL_STEPS + 1))
+    mat_zones = region_containers(MAT_BOUNDS)
+    dl_step_zones = region_containers(DL_STEP_BOUNDS)
 
-    # set materials for QUAD elements
-    m_indexes = quad_elements.index, list("ijkl")
-    quad_mat_multi_e_ijkl = pd.DataFrame(
-        index=pd.MultiIndex.from_product(m_indexes), columns=["x", "y"]
-    )
-    quad_mat_multi_e_ijkl.loc[(slice(None), "i"), :] = msh_n_df.loc[
-        quad_elements.loc[:, "i"]
-    ].values
-    quad_mat_multi_e_ijkl.loc[(slice(None), "j"), :] = msh_n_df.loc[
-        quad_elements.loc[:, "j"]
-    ].values
-    quad_mat_multi_e_ijkl.loc[(slice(None), "k"), :] = msh_n_df.loc[
-        quad_elements.loc[:, "k"]
-    ].values
-    quad_mat_multi_e_ijkl.loc[(slice(None), "l"), :] = msh_n_df.loc[
-        quad_elements.loc[:, "l"]
-    ].values
-    quad_center = pd.DataFrame(index=quad_elements.index, columns=["cx", "cy"])
-    quad_center.loc[:, :] = (
-        quad_mat_multi_e_ijkl.sum(level=0) / len(m_indexes[1])
-    ).values
-    for mat_num, mat_zone in mat_zones.transpose().iteritems():
-        idx = (
-            (quad_center.cx.gt(mat_zone["minx"]))
-            & (quad_center.cx.lt(mat_zone["maxx"]))
-            & (quad_center.cy.gt(mat_zone["miny"]))
-            & (quad_center.cy.lt(mat_zone["maxy"]))
+    # set materials and steps for QUAD elements and TRIA elements
+    for continuum_elements, continuum_type in zip(
+        (quad_elements, tria_elements), (SoilElementType.quad, SoilElementType.tria)
+    ):
+        regionally_assign_continuum_type(
+            continuum_elements, msh_n_df, continuum_type, mat_zones, dl_step_zones
         )
-        quad_elements.loc[idx, "mat"] = mat_num
 
-    # set steps for QUAD elements
-    quad_elements.loc[:, "step"] = 1
+    # TODO: produce interfaces BEFORE concating structure elements with others (node numbering change)
+    interf_elements = []
+    for interfaces in INTERF_STRUCT_NODES:
+        n_interf = len(interfaces)
+        interf_index = range(1, n_interf + 1)
+        interf_elements.append(
+            pd.DataFrame(index=interf_index, columns=ELEMENT_COLUMNS)
+        )
+        # interf_elements["i"] = interf_nodes.index + msh_n_df.index[-1]
+        # interf_elements["j"] = interf_nodes["n"]
+        # interf_elements["k"] =
+        # interf_elements["l"] = 0
+        # interf_elements["mat"] = interf_nodes.index
+        # interf_elements["step"] = 1
+        # interf_elements["interf"] = 1
 
-    # TODO: set materials and steps for TRIA elements
+    # sanity check:
+    assert len(interf_elements) == N_STRUCTS
 
-    # produce interfaces BEFORE concating structure elements with others (node numbering change)
-    # TODO: iterate over interface sets for multiple structures/groups
-    interf_index = range(1, n_interf+1)
-    interf_elements = pd.DataFrame(index=interf_index, columns=element_columns)
-    interf_elements["i"] = interf_nodes.index + msh_n_df.index[-1]
-    interf_elements["j"] = interf_nodes["n"]
-    interf_elements["k"] =
-    interf_elements["l"] = 0
-    interf_elements["mat"] = interf_nodes.index
-    interf_elements["step"] = 1
-    interf_elements["interf"] = 1
+    # combine QUAD and TRIA, into a single soil df
+    soil_elements_no_interf = pd.concat([quad_elements, tria_elements]).sort_index()
 
-    # combine, structure, QUAD, TRIA, into a single soil df, renumber to place beams first
-    soil_elements = pd.concat([quad_elements, tria_elements]).sort_index()
-    soil_elements.index += len(struct_elements)
-    elements_no_interf = pd.concat([struct_elements, soil_elements])
+    # combine, structure and soil into a single df, renumber to place beams first
+    soil_elements_no_interf.index += sum(
+        len(structx_elements) for structx_elements in struct_elements
+    )
+    # TODO: renumber struct elements to be sequential instead of starting over at 1
+    elements_no_interf = pd.concat([*struct_elements, soil_elements_no_interf])
     elements_no_interf.index.name = "e"
     elements_no_interf["interf"] = 0
 
-    # TODO: concat elements with interf elements
-    elements = pd.concat([elements_no_interf, interf_elements])
+    # concat elements with interf elements
+    elements = pd.concat([elements_no_interf, *interf_elements])
+    elements.index.name = "e"
 
     # TODO: concat nodes with interf nodes
     nodes = msh_n_df.copy()
 
     # define boundaries df; use extends as starting point
     # TODO: add more options/user interaction/LL boundaries
+    # TODO: handle correct steps for boundaries
     boundaries = msh_ext_df
     # sanity check
-    assert boundaries.step.le(N_LL_STEPS).all()
+    assert boundaries.step.le(N_LL_STEPS if N_LL_STEPS else N_DL_STEPS).all()
 
     # prepare output lines
     C2 = C2_FMT.format(
@@ -189,7 +182,7 @@ if __name__ == "__main__":
     C5[C5.index[-1]] = lastify(C5[C5.index[-1]])
 
     # TODO: prompt user for output path
-    out = Path("result.cid._partial")
+    out = CANDE_FILE
     with out.open("w") as f:
         f.write(C2)
         f.write("\n")
@@ -199,4 +192,3 @@ if __name__ == "__main__":
         f.write("\n")
         f.write("\n".join(C5))
         f.write("\n")
-    ...
