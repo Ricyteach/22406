@@ -14,8 +14,9 @@ def build_struct_and_kept_indexes(*, show=True):
     struct = Structure(msh_b_df, msh_n_df, msh_e_df, msh_ext_df)
     if show:
         struct.show_candidates()
+    # keep only unique indexes
     struct.candidates_df = struct.candidates_df.loc[
-        [idx for indexes in KEEP_INDEXES for idx in indexes], :
+        list(dict.fromkeys(idx for indexes in KEEP_INDEXES for idx in indexes))
     ]
     if show:
         struct.show_candidates()

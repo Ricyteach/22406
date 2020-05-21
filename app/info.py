@@ -11,9 +11,9 @@ CANDE_FILE = CANDE_FOLDER / r"result.cid._partial"
 N_STRUCTS = 3
 
 KEEP_INDEXES = [
-    [],
-    [],
-    [],
+    [*range(39, 51), ],
+    [*range(50, 71), ],
+    [*range(70, 81), 1],
 ]
 
 # user input
@@ -23,10 +23,11 @@ INTERF_STRUCT_NODES = [
     range(0),
 ]
 
+# TODO: this is really not n_beams but n_nodes; need to fix for noncontiguous structures
 N_BEAMS = [
-    len(KEEP_INDEXES[0]),
-    len(KEEP_INDEXES[1]),
-    len(KEEP_INDEXES[2]),
+    len(KEEP_INDEXES[0])-1,  # the -1 is a hack
+    len(KEEP_INDEXES[1])-1,  # the -1 is a hack
+    len(KEEP_INDEXES[2])-1,  # the -1 is a hack
 ]
 
 STRUCT_STEPS = [1, 1, 2]
@@ -49,7 +50,7 @@ N_MATERIALS = 3
 # material boundaries
 MAT_BOUNDS = {
     1: [(-530.0, -120.0), (530.0, -120.0), (530.0, 0.0), (-530.0, 0.0)],
-    2: [(-530.0, 0.0), (530.0, 0.0), (-530.0, 118.0), (-530.0, 118.0)],
+    2: [(-530.0, 0.0), (530.0, 0.0), (530.0, 118.0), (-530.0, 118.0)],
     3: [(-169.75, 0.0), (169.75, 0.0), (169.75, 118.0), (-169.75, 118.0)],
 }
 # sanity check
